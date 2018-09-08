@@ -1,0 +1,325 @@
+version: '3.5'
+services:
+  portainer:
+    image: portainer/portainer
+    container_name: portainer
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+    volumes:
+      - /data/docker/portainer:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  cloudflareddns:
+    image: oznu/cloudflare-ddns:latest
+    container_name: cloudflareddn
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+      - ZONE=${CLOUDFLARE_ZONE}
+      - EMAIL=${CLOUDFLARE_USERNAME}
+      - PROXIED=false
+      - API_KEY=${CLOUDFLARE_TOKEN}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+  
+  letsencryptdns:
+    image: adferrand/letsencrypt-dns
+    container_name: letsencryptdns
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+      - LETSENCRYPT_USER_MAIL=${LETSENCRYPT_USER_MAIL}
+      - LEXICON_PROVIDER=cloudflare
+      - LEXICON_CLOUDFLARE_USERNAME=${CLOUDFLARE_USERNAME}
+      - LEXICON_CLOUDFLARE_TOKEN=${CLOUDFLARE_TOKEN}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/letsencrypt/domains.conf:/etc/letsencrypt/domains.conf
+      - /data/docker/letsencrypt:/etc/letsencrypt
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    restart: unless-stopped
+    networks:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+      - "22:22"
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - /data/docker/nginx/conf.d:/etc/nginx/conf.d
+      - /data/docker/letsencrypt/live:/etc/nginx/conf.d/ssl/live:ro
+      - /data/docker/letsencrypt/archive:/etc/nginx/conf.d/ssl/archive:ro
+
+  oauth2_proxy:
+    image: a5huynh/oauth2_proxy:latest
+    container_name: oauth2_proxy
+    restart: unless-stopped
+    networks:
+      - backend
+    command: --custom-templates-dir="/config/templates" --authenticated-emails-file="/config/emails" --request-logging=True --provider="${OAUTH_PROVIDER}" --login-url="${OAUTH_LOGIN_URL}" --redeem-url="${OAUTH_REDEEM_URL}" --validate-url="${OAUTH_VALIDATE_URL}" --cookie-secure=true --set-xauthrequest=True --http-address="0.0.0.0:4180" --upstream="http://127.0.0.1"
+    ports:
+      - 4180:4180
+    environment:
+      - TZ=${TIME_ZONE}
+      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH_COOKIE_SECRET}
+      - OAUTH2_PROXY_COOKIE_DOMAIN=${OAUTH_COOKIE_DOMAIN}
+      - OAUTH2_PROXY_CLIENT_ID=${OAUTH_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${OAUTH_CLIENT_SECRET}
+      - OAUTH2_PROXY_COOKIE_EXPIRE=${OAUTH2_PROXY_COOKIE_EXPIRE}
+      - OAUTH2_PROXY_COOKIE_REFRESH=${OAUTH2_PROXY_COOKIE_REFRESH}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/nginx/oauth:/config
+      
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'https://gitlab.shane.app'
+    volumes:
+      - '/data/docker/gitlab/config:/etc/gitlab'
+      - '/data/docker/gitlab/logs:/var/log/gitlab'
+      - '/data/docker/gitlab/data:/var/opt/gitlab'
+
+  heimdall:
+    image: linuxserver/heimdall:latest
+    container_name: heimdall
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=American/Chicago
+      - PGID=${PGID}
+      - PUID=${PUID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/heimdall:/config
+
+  homeassistant:
+    image: homeassistant/home-assistant:latest
+    container_name: home-assistant
+    privileged: true
+    restart: unless-stopped
+    network_mode: host
+    devices:
+      - /dev/ttyACM0:/dev/ttyACM0
+    environment:
+      - TZ=${TIME_ZONE}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/hass/hass-config:/config
+      - /data/docker/hass/hass-media:/media
+  
+  transmission:
+    image: linuxserver/transmission:latest
+    container_name: transmission
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=American/Chicago
+      - PGID=${PGID}
+      - PUID=${PUID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/transmission:/config
+      - /data/media/transmission:/downloads
+      - /data/media/transmission/watch
+  
+  jackett:
+    image: linuxserver/jackett:latest
+    container_name: jackett
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=American/Chicago
+      - PGID=${PGID}
+      - PUID=${PUID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/jackett:/config
+      - /data/media/transmission/blackhole:/downloads
+
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    networks:
+      - backend
+    depends_on:
+      - transmission
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/sonarr:/config
+      - /data/media/series:/tv
+      - /data/media/transmission:/downloads
+
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    networks:
+      - backend
+    depends_on:
+      - transmission
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/radarr:/config
+      - /data/media/movies:/movies
+      - /data/media/transmission:/downloads
+
+  lidarr:
+    image: linuxserver/lidarr:latest
+    container_name: lidarr
+    restart: unless-stopped
+    networks:
+      - backend
+    depends_on:
+      - transmission
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/lidarr:/config
+      - /data/media/music:/music
+      - /data/media/transmission:/downloads
+
+  plex:
+    image: plexinc/pms-docker:latest
+    container_name: plex
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=${TIME_ZONE}
+      - PLEX_CLAIM=${PLEX_TOKEN}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/plex/config:/config
+      - /data/docker/plex/transcode:/transcode
+      - /data/media:/data
+
+  tautulli:
+    image: linuxserver/tautulli:latest
+    container_name: tautulli
+    restart: unless-stopped
+    networks:
+      - backend
+    depends_on:
+      - plex
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/tautulli:/config
+
+  ombi:
+    image: linuxserver/ombi:latest
+    container_name: ombi
+    restart: unless-stopped
+    networks:
+      - backend
+    depends_on:
+      - plex
+      - sonarr
+      - radarr
+      - lidarr
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/ombi:/config
+
+  bitwarden:
+    image: shauder/bitwarden_rs:ws-alpine
+    container_name: bitwardenrs
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/bitwarden:/data
+  
+  nodered:
+    image: nodered/node-red-docker:v8
+    container_name: nodered
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/node-red:/data
+
+  appdaemon:
+    image: acockburn/appdaemon:latest
+    container_name: appdaemon
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+      - HA_URL=${HA_URL}
+      - HA_KEY=${HA_KEY}
+      - DASH_URL=${DASH_URL}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/appdaemon:/conf
+
+  filebrowser:
+    image: filebrowser/filebrowser
+    container_name: filebrowser
+    restart: unless-stopped
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+      - VIRTUAL_HOST=${VIRTUAL_HOST}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data:/srv
+      - /data/docker/filebrowser/config.json:/config.json
+      - /data/docker/filebrowser/database.db:/database.db
+
+networks:
+  frontend:
+  backend:
