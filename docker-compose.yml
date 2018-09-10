@@ -1,11 +1,12 @@
 version: '3.5'
 services:
   portainer:
-    image: portainer/portainer
+    image: portainer/portainer:latest
     container_name: portainer
     restart: unless-stopped
     networks:
       - backend
+    command: --no-auth
     environment:
       - TZ=${TIME_ZONE}
     volumes:
@@ -28,7 +29,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
   
   letsencryptdns:
-    image: adferrand/letsencrypt-dns
+    image: adferrand/letsencrypt-dns:latest
     container_name: letsencryptdns
     restart: unless-stopped
     networks:
@@ -73,8 +74,6 @@ services:
     networks:
       - backend
     command: --custom-templates-dir="/config/templates" --authenticated-emails-file="/config/emails" --request-logging=True --provider="${OAUTH_PROVIDER}" --login-url="${OAUTH_LOGIN_URL}" --redeem-url="${OAUTH_REDEEM_URL}" --validate-url="${OAUTH_VALIDATE_URL}" --cookie-secure=true --set-xauthrequest=True --http-address="0.0.0.0:4180" --upstream="http://127.0.0.1"
-    ports:
-      - 4180:4180
     environment:
       - TZ=${TIME_ZONE}
       - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH_COOKIE_SECRET}
