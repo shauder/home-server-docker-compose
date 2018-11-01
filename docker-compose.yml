@@ -10,6 +10,7 @@ services:
     environment:
       - TZ=${TIME_ZONE}
     volumes:
+      - /etc/localtime:/etc/localtime:ro
       - /data/docker/portainer:/data
       - /var/run/docker.sock:/var/run/docker.sock
 
@@ -42,6 +43,7 @@ services:
       - LEXICON_CLOUDFLARE_TOKEN=${CLOUDFLARE_TOKEN}
     volumes:
       - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - /data/docker/letsencrypt/domains.conf:/etc/letsencrypt/domains.conf
       - /data/docker/letsencrypt:/etc/letsencrypt
 
@@ -52,6 +54,28 @@ services:
     networks:
       - frontend
       - backend
+    depends_on:
+      - portainer
+      - cloudflareddns
+      - letsencryptdns
+      - oauth2_proxy
+      - gitlab
+      - heimdall
+      - huelightdj
+      - mosquitto
+      - homeassistant
+      - transmission
+      - jackett
+      - sonarr
+      - radarr
+      - lidarr
+      - plex
+      - tautulli
+      - ombi
+      - bitwarden
+      - nodered
+      - appdaemon
+      - filebrowser
     ports:
       - "80:80"
       - "443:443"
@@ -113,12 +137,40 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/heimdall:/config
+      
+  huelightdj:
+    image: michielpost/huelightdj:latest
+    container_name: huelightdj
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      - TZ=${TIME_ZONE}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
 
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=${TIME_ZONE}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/mosquitto/config:/mosquitto/config
+      - /data/docker/letsencrypt/live:/mosquitto/config/ssl/live:ro
+      - /data/docker/letsencrypt/archive:/mosquitto/config/ssl/archive:ro
+      - /data/docker/mosquitto/data:/mosquitto/data
+      - /data/docker/mosquitto/log/mosquitto.log:/mosquitto/log/mosquitto.log
+      
   homeassistant:
     image: homeassistant/home-assistant:latest
     container_name: home-assistant
     privileged: true
     restart: unless-stopped
+    depends_on:
+      - mosquitto
     network_mode: host
     devices:
       - /dev/ttyACM0:/dev/ttyACM0
@@ -266,13 +318,23 @@ services:
       - /data/docker/ombi:/config
 
   bitwarden:
-    image: shauder/bitwarden_rs:ws-alpine
+    image: mprasil/bitwarden:alpine
     container_name: bitwardenrs
     restart: unless-stopped
     networks:
       - backend
     environment:
       - TZ=${TIME_ZONE}
+      - SIGNUPS_ALLOWED=${SIGNUPS_ALLOWED}
+      - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED}
+      - SERVER_ADMIN_EMAIL=${SERVER_ADMIN_EMAIL}
+      - DOMAIN=${DOMAIN}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_SSL=${SMTP_SSL}
+      - SMTP_FROM=${SMTP_FROM}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/bitwarden:/data
