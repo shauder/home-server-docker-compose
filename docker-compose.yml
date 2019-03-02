@@ -14,6 +14,31 @@ services:
       - /data/docker/portainer:/data
       - /var/run/docker.sock:/var/run/docker.sock
 
+  unifi-controller:
+    image: linuxserver/unifi-controller
+    container_name: unifi-controller
+    environment:
+      - PUID=1001
+      - PGID=1001
+    environment:
+      - TZ=American/Chicago
+      - PGID=${PGID}
+      - PUID=${PUID}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/unifi-controller:/config
+    network_mode: host
+    ports:
+      - 3478:3478/udp
+      - 10001:10001/udp
+      - 8080:8080
+      - 8081:8081
+      - 8443:8443
+      - 8843:8843
+      - 8880:8880
+      - 6789:6789
+    restart: unless-stopped
+
   cloudflareddns:
     image: oznu/cloudflare-ddns:latest
     container_name: cloudflareddn
@@ -28,7 +53,7 @@ services:
       - API_KEY=${CLOUDFLARE_TOKEN}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-  
+
   letsencryptdns:
     image: adferrand/letsencrypt-dns:latest
     container_name: letsencryptdns
@@ -75,11 +100,12 @@ services:
       - bitwarden
       - nodered
       - appdaemon
-      - filebrowser
+#      - filebrowser
     ports:
       - "80:80"
       - "443:443"
       - "22:22"
+      - "8086:8086"
     environment:
       - TZ=${TIME_ZONE}
       - PUID=${PUID}
@@ -109,7 +135,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/nginx/oauth:/config
-      
+
   gitlab:
     image: gitlab/gitlab-ce:latest
     container_name: gitlab
@@ -137,7 +163,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/heimdall:/config
-      
+
   huelightdj:
     image: michielpost/huelightdj:latest
     container_name: huelightdj
@@ -163,7 +189,7 @@ services:
       - /data/docker/letsencrypt/archive:/mosquitto/config/ssl/archive:ro
       - /data/docker/mosquitto/data:/mosquitto/data
       - /data/docker/mosquitto/log/mosquitto.log:/mosquitto/log/mosquitto.log
-      
+
   homeassistant:
     image: homeassistant/home-assistant:latest
     container_name: home-assistant
@@ -172,15 +198,13 @@ services:
     depends_on:
       - mosquitto
     network_mode: host
-    devices:
-      - /dev/ttyACM0:/dev/ttyACM0
     environment:
       - TZ=${TIME_ZONE}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/hass/hass-config:/config
       - /data/docker/hass/hass-media:/media
-  
+
   transmission:
     image: linuxserver/transmission:latest
     container_name: transmission
@@ -196,7 +220,7 @@ services:
       - /data/docker/transmission:/config
       - /data/media/transmission:/downloads
       - /data/media/transmission/watch
-  
+
   jackett:
     image: linuxserver/jackett:latest
     container_name: jackett
@@ -326,8 +350,8 @@ services:
     environment:
       - TZ=${TIME_ZONE}
       - SIGNUPS_ALLOWED=${SIGNUPS_ALLOWED}
+      - INVITATIONS_ALLOWED=${INVITATIONS_ALLOWED}
       - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED}
-      - SERVER_ADMIN_EMAIL=${SERVER_ADMIN_EMAIL}
       - DOMAIN=${DOMAIN}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
@@ -338,7 +362,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/bitwarden:/data
-  
+
   nodered:
     image: nodered/node-red-docker:v8
     container_name: nodered
@@ -366,20 +390,72 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/appdaemon:/conf
 
+  theia:
+    image: theiaide/theia:next
+    container_name: theia
+    restart: unless-stopped
+    networks:
+     - backend
+    environment:
+     - TZ=${TIME_ZONE}
+    user: 1000:1000
+    volumes:
+     - /etc/localtime:/etc/localtime:ro
+     - /data/docker/nginx:/home/project:cached
+
   filebrowser:
-    image: filebrowser/filebrowser
+    image: filebrowser/filebrowser:latest
     container_name: filebrowser
+    restart: unless-stopped
+    networks:
+     - backend
+    environment:
+     - TZ=${TIME_ZONE}
+     - VIRTUAL_HOST=${VIRTUAL_HOST}
+    volumes:
+     - /etc/localtime:/etc/localtime:ro
+     - /data:/srv
+     - /data/docker/filebrowser/database.db:/database.db
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
     restart: unless-stopped
     networks:
       - backend
     environment:
       - TZ=${TIME_ZONE}
-      - VIRTUAL_HOST=${VIRTUAL_HOST}
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - /data:/srv
-      - /data/docker/filebrowser/config.json:/config.json
-      - /data/docker/filebrowser/database.db:/database.db
+      - /data/docker/jellyfin:/config
+      - /data/media:/media
+
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
+    restart: unless-stopped
+    command: -config /var/lib/influxdb/influxdb.conf
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/influxdb/:/var/lib/influxdb
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    user: 0:0
+    networks:
+      - backend
+    environment:
+      - TZ=${TIME_ZONE}
+      - GF_SERVER_ROOT_URL=https://grafana.shane.app
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /data/docker/grafana:/var/lib/grafana
 
 networks:
   frontend:
