@@ -113,6 +113,7 @@ services:
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - /data/docker/nginx/mime.types:/etc/nginx/mime.types
       - /data/docker/nginx/conf.d:/etc/nginx/conf.d
       - /data/docker/letsencrypt/live:/etc/nginx/conf.d/ssl/live:ro
       - /data/docker/letsencrypt/archive:/etc/nginx/conf.d/ssl/archive:ro
@@ -197,6 +198,9 @@ services:
     restart: unless-stopped
     depends_on:
       - mosquitto
+      - unifi-controller
+      - influxdb
+      - grafana
     network_mode: host
     environment:
       - TZ=${TIME_ZONE}
@@ -359,6 +363,8 @@ services:
       - SMTP_FROM=${SMTP_FROM}
       - SMTP_USERNAME=${SMTP_USERNAME}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - YUBICO_CLIENT_ID=${YUBICO_CLIENT_ID}
+      - YUBICO_SECRET_KEY=${YUBICO_SECRET_KEY}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /data/docker/bitwarden:/data
